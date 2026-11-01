@@ -6,6 +6,7 @@ let package = Package(
   products: [.executable(name: "TrackpadStudio", targets: ["TrackpadStudio"])],
   targets: [
     .target(name: "StudioCore"),
-    .executableTarget(name: "TrackpadStudio", dependencies: ["StudioCore"]),
+    .target(name: "SystemIndicator"),
+    .executableTarget(name: "TrackpadStudio", dependencies: ["StudioCore", "SystemIndicator"]),
     .testTarget(name: "StudioCoreTests", dependencies: ["StudioCore"]),
   ])

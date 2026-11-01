@@ -20,6 +20,14 @@ import SwiftUI
         exit(2)
       }
     }
+    if CommandLine.arguments.contains("--check-volume-indicator") {
+      do {
+        let value = try CoreAudioVolume().read()
+        print(VolumeIndicator().show(value))
+        RunLoop.main.run(until: Date().addingTimeInterval(1.2))
+        exit(0)
+      } catch { print(error.localizedDescription); exit(2) }
+    }
     if CommandLine.arguments.contains("--check-audio") {
       do {
         let audio = CoreAudioVolume()
@@ -46,72 +54,9 @@ import SwiftUI
     }.defaultSize(width: 560, height: 600)
   }
 }
-struct MenuBarControlCenter: View {
-  @ObservedObject var state: AppState
-  @Environment(\.openWindow) private var openWindow
-  var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      HStack {
-        VStack(alignment: .leading) {
-          Text("Trackpad Studio").font(.headline)
-          Text(state.settings.paused ? "Gestures paused" : "Gestures enabled").foregroundStyle(
-            .secondary)
-        }
-        Spacer()
-        Button(state.settings.paused ? "Resume" : "Pause") { state.update { $0.paused.toggle() } }
-          .accessibilityLabel("Pause or resume trackpad gestures")
-      }
-      Picker(
-        "Profile",
-        selection: Binding<UUID?>(
-          get: { state.settings.manualProfile },
-          set: { id in state.update { $0.manualProfile = id } })
-      ) {
-        Text(
-          state.settings.manualProfile == nil
-            ? "Auto · \(state.profile.name)" : "Auto (follow foreground app)"
-        ).tag(nil as UUID?)
-        ForEach(state.settings.profiles) { Text("Manual · \($0.name)").tag(Optional($0.id)) }
-      }
-      Text(state.foreground).font(.caption).foregroundStyle(.secondary).lineLimit(1).help(
-        state.foreground)
-      Divider()
-      HStack {
-        Label("Output volume", systemImage: "speaker.wave.2")
-        Spacer()
-        Text("\(Int(state.volume * 100))%").monospacedDigit()
-      }
-      Slider(
-        value: Binding(get: { state.volume }, set: { state.perform(.init(.setVolume, $0)) }),
-        in: 0...1
-      )
-      .disabled(state.volumeIssue != nil).accessibilityLabel("Output volume")
-      .accessibilityValue("\(Int(state.volume * 100)) percent")
-      if let issue = state.volumeIssue { Text(issue).font(.caption).foregroundStyle(.secondary) }
-      HStack {
-        ForEach(Array(state.settings.pins.enumerated()), id: \.offset) { _, delta in
-          Button(delta >= 0 ? "Volume +\(Int(delta * 100))%" : "Volume \(Int(delta * 100))%") {
-            state.perform(.init(.adjustVolume, delta))
-          }.disabled(state.volumeIssue != nil)
-        }
-      }
-      Text("Brightness and media controls are not available in this build.").font(.caption)
-        .foregroundStyle(.secondary)
-      Divider()
-      Text(state.touchStatus).font(.caption)
-      HStack {
-        Button("Edit profile / Settings…") {
-          openWindow(id: "settings")
-          NSApplication.shared.activate(ignoringOtherApps: true)
-        }
-        Spacer()
-        Button("Quit") { state.quit() }.keyboardShortcut("q")
-      }
-    }.padding(18).frame(width: 350)
-  }
-}
 struct ProfileEditor: View {
   @ObservedObject var state: AppState
+  @AppStorage("useCompatibilityIndicator") private var compatibilityIndicator = false
   @State private var bundleDraft = ""
   var body: some View {
     TabView {
@@ -143,9 +88,7 @@ struct ProfileEditor: View {
           "Start at the right edge, slide vertically to activate, then keep sliding. Lift your finger before trying again."
         ).font(.callout)
         HStack {
-          RoundedRectangle(cornerRadius: 12).fill(.quaternary).overlay(alignment: .trailing) {
-            RoundedRectangle(cornerRadius: 6).fill(Color.accentColor).frame(width: 22).padding(5)
-          }
+          TrackpadDiagram(width: state.profile.gesture.edgeWidth)
           Text("Right edge → Volume")
         }.frame(height: 90).accessibilityElement(children: .ignore).accessibilityLabel(
           "Trackpad map: right edge controls volume")
@@ -174,6 +117,9 @@ struct ProfileEditor: View {
       ProposalEditor(state: state).tabItem { Label("Customization", systemImage: "wand.and.stars") }
       VStack(alignment: .leading, spacing: 14) {
         Text("Diagnostics & Permissions").font(.title2)
+        Toggle("Use compatibility volume indicator", isOn: $compatibilityIndicator)
+          .help("Use this if the system volume indicator does not appear.")
+        Button("Try gesture quietly…") { state.beginPractice() }
         Text(state.touchStatus)
         Text("Frames received: \(state.frameCount) · Actions dispatched: \(state.actionCount)")
         Text(

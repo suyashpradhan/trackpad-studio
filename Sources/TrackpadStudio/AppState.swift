@@ -15,7 +15,29 @@ import StudioCore
   let audio = CoreAudioVolume()
   lazy var router = ActionRouter(volume: audio)
   private let touch = RealTouchProvider()
-  private var engine = GestureEngine()
+  private var engine = VolumeGestureSession()
+  private let indicator = VolumeIndicator()
+  private lazy var practiceWindow = PracticeWindow(state: self)
+  @Published private(set) var outputName = "Default output"
+  @Published private(set) var practiceProgress = GestureProgress.ready
+  @Published private(set) var practicePoint: CGPoint?
+  @Published private(set) var sampleLevel = 0.5
+  @Published private(set) var practicedSlide = false
+  @Published private(set) var touchAvailable = false
+
+  func beginPractice() {
+    engine.practice()
+    practiceProgress = .ready
+    practicePoint = nil
+    practicedSlide = false
+    sampleLevel = engine.sampleLevel
+    practiceWindow.present()
+  }
+  func closePractice() { practiceWindow.close() }
+  func finishPractice() {
+    engine.finishPractice()
+    practicePoint = nil
+  }
   private var received = 0
   private var awaitingFrame = true
   private var history: [Settings] = []
@@ -68,9 +90,13 @@ import StudioCore
         self?.refreshVolume()
       }
     }
+    if CommandLine.arguments.contains("--practice") {
+      DispatchQueue.main.async { [weak self] in self?.beginPractice() }
+    }
   }
   func restartTouch() {
     touch.stop()
+    touchAvailable = false
     engine.reset()
     awaitingFrame = true
     guard !settings.paused else {
@@ -79,6 +105,7 @@ import StudioCore
     }
     do {
       try touch.start()
+      touchAvailable = true
       touchStatus = "Trackpad connected · awaiting touch frames"
     } catch { touchStatus = error.localizedDescription }
   }
@@ -92,15 +119,24 @@ import StudioCore
     if let invocation = engine.consume(frame, settings: profile.gesture, paused: settings.paused) {
       perform(invocation)
     }
+    if engine.practicing {
+      let point = frame.contacts.first.map { CGPoint(x: $0.x, y: $0.y) }
+      if point != practicePoint { practicePoint = point }
+      if practiceProgress != engine.progress { practiceProgress = engine.progress }
+      if sampleLevel != engine.sampleLevel { sampleLevel = engine.sampleLevel; practicedSlide = true }
+    }
   }
   func perform(_ invocation: ActionInvocation) {
     do {
       volume = try router.dispatch(invocation)
+      indicator.show(volume)
       volumeIssue = nil
       actionCount += 1
     } catch { volumeIssue = error.localizedDescription }
   }
   func refreshVolume() {
+    let name = audio.outputName
+    if outputName != name { outputName = name }
     do {
       let current = try audio.read()
       if volume != current { volume = current }

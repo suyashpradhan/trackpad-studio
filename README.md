@@ -63,3 +63,15 @@ The host CoreAudio smoke check read the default output at 25%, wrote the same va
 ```
 
 Settings → Customization accepts “make volume gentler” and “make volume faster” using a deterministic offline provider. It previews the change, validates availability, and requires Apply. Undo restores the previous settings during the session. This is a working rules adapter, not an LLM integration.
+
+## Testing the P0 volume experience (0.2)
+
+Open the menu-bar icon and choose **Practice quietly** or **Try gesture**. Lift all fingers, start inside the shaded right edge, and slide vertically. The practice window shows the contact, activation distance, and a sample volume. **Try it with sound** returns to live control. **Use menu controls** pauses gestures. Closing the practice window returns to the previous gesture setting.
+
+The popover identifies the current output. A volume change from the app requests the macOS indicator. If the private API is unavailable, a click-through overlay shows the level. If macOS silently ignores the request, select **Settings → Diagnostics → Use compatibility volume indicator**. Volume changes from physical keyboard keys refresh the popover without requesting a second indicator.
+
+For a local test, quit any running copy and open the app directly into practice:
+
+```sh
+open "dist/Trackpad Studio.app" --args --practice
+```

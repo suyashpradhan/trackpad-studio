@@ -132,7 +132,12 @@ public struct TouchFrame: Sendable {
     self.contacts = contacts
   }
 }
+public enum GestureProgress: Equatable {
+  case ready, outsideEdge, liftFinger, tracking(Double), activated
+}
+
 public struct GestureEngine {
+  public private(set) var progress: GestureProgress = .ready
   private var origin: Contact?
   private var lastY = 0.0
   private var active = false
@@ -143,6 +148,7 @@ public struct GestureEngine {
   public init() {}
   public mutating func reset() {
     self = .init()
+    progress = .liftFinger
     blocked = true
   }
   public mutating func consume(_ frame: TouchFrame, settings: GestureSettings, paused: Bool)
@@ -154,6 +160,7 @@ public struct GestureEngine {
     }
     lastTime = frame.time
     if frame.contacts.isEmpty {
+      progress = .ready
       if origin != nil { until = frame.time + 0.25 }
       origin = nil
       active = false
@@ -166,18 +173,23 @@ public struct GestureEngine {
     else {
       origin = nil
       active = false
+      progress = .liftFinger
       blocked = true
       return nil
     }
-    guard !blocked, frame.time >= until else {
+    guard !blocked else { return nil }
+    guard frame.time >= until else {
+      progress = .liftFinger
       blocked = true
       return nil
     }
     guard let start = origin else {
       guard c.x >= 1 - settings.edgeWidth else {
+        progress = .outsideEdge
         blocked = true
         return nil
       }
+      progress = .tracking(0)
       origin = c
       lastY = c.y
       return nil
@@ -187,11 +199,14 @@ public struct GestureEngine {
     else {
       origin = nil
       active = false
+      progress = .liftFinger
       blocked = true
       return nil
     }
     if !active {
-      guard abs(c.y - start.y) >= settings.threshold else { return nil }
+      let distance = abs(c.y - start.y) / settings.threshold
+      guard distance >= 1 else { progress = .tracking(distance); return nil }
+      progress = .activated
       active = true
       lastY = c.y
       lastEmission = frame.time

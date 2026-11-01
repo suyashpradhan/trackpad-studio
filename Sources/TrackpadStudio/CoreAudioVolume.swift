@@ -15,6 +15,16 @@ import StudioCore
     else { throw ActionError.unavailable("No default audio output device.") }
     return id
   }
+  var outputName: String {
+    guard let id = try? device() else { return "No audio output" }
+    var address = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertyName,
+      mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    var name: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout.size(ofValue: name))
+    guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &name) == noErr,
+          let name else { return "Default output" }
+    return name.takeRetainedValue() as String
+  }
   private func writableProperty(_ id: AudioDeviceID) throws -> AudioObjectPropertyAddress {
     for selector in [
       kAudioDevicePropertyVolumeScalar, kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
