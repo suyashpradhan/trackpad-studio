@@ -32,6 +32,28 @@ struct MenuBarControlCenter: View {
       }
       Divider()
       HStack {
+        Label("Display brightness", systemImage: "sun.max.fill").font(.headline)
+        Spacer()
+        if state.brightnessIssue == nil {
+          Text(state.brightness, format: .percent.precision(.fractionLength(0))).monospacedDigit()
+        }
+      }
+      Text(state.displayName).foregroundStyle(.secondary)
+      if let issue = state.brightnessIssue {
+        Text(issue).font(.callout)
+      } else {
+        Slider(value: Binding(get: { state.brightness }, set: { state.perform(.init(.setBrightness, $0)) }), in: 0...1)
+          .accessibilityLabel("Brightness on \(state.displayName)")
+          .accessibilityValue(Text(state.brightness, format: .percent.precision(.fractionLength(0))))
+        if state.profile.leftEdgeEnabled == true {
+          Toggle("Left-edge brightness", isOn: Binding(get: { state.profile.leftEdgeEnabled == true },
+            set: { enabled in state.editProfile { $0.leftEdgeEnabled = enabled } }))
+        } else {
+          Button("Try left-edge brightness…") { state.beginPractice(edge: .left) }
+        }
+      }
+      Divider()
+      HStack {
         Label(state.settings.paused ? "Gestures paused" : !state.touchAvailable ? "Trackpad unavailable" : state.profile.gesture.enabled ? "Right edge enabled" : "Right edge disabled",
               systemImage: state.settings.paused ? "pause.circle" : "hand.draw")
         Spacer()

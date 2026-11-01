@@ -1,6 +1,9 @@
 import Foundation
 
-public enum ActionID: String, Codable, CaseIterable, Sendable { case setVolume, adjustVolume }
+public enum ActionID: String, Codable, CaseIterable, Sendable { case setVolume, adjustVolume, setBrightness, adjustBrightness
+  public var isBrightness: Bool { self == .setBrightness || self == .adjustBrightness }
+  public var isRelative: Bool { self == .adjustVolume || self == .adjustBrightness }
+}
 public struct ActionInvocation: Codable, Equatable, Sendable {
   public var action: ActionID
   public var value: Double
@@ -22,23 +25,32 @@ public enum ActionError: Error, LocalizedError {
 public enum ActionRegistry {
   public static func validate(_ invocation: ActionInvocation) throws {
     guard invocation.value.isFinite else { throw ActionError.invalid }
-    let range: ClosedRange<Double> = invocation.action == .setVolume ? 0...1 : -1...1
+    let range: ClosedRange<Double> = invocation.action.isRelative ? -1...1 : 0...1
     guard range.contains(invocation.value) else { throw ActionError.invalid }
   }
 }
-@MainActor public protocol VolumeController: AnyObject {
+@MainActor public protocol LevelController: AnyObject {
   func read() throws -> Double
   func write(_ value: Double) throws
 }
+public typealias VolumeController = LevelController
 @MainActor public final class ActionRouter {
   private let volume: any VolumeController
-  public init(volume: any VolumeController) { self.volume = volume }
+  private let brightness: (any LevelController)?
+  public init(volume: any VolumeController, brightness: (any LevelController)? = nil) {
+    self.volume = volume
+    self.brightness = brightness
+  }
   @discardableResult public func dispatch(_ invocation: ActionInvocation) throws -> Double {
     try ActionRegistry.validate(invocation)
-    let target =
-      invocation.action == .setVolume ? invocation.value : try volume.read() + invocation.value
-    try volume.write(min(1, max(0, target)))
-    return try volume.read()
+    let controller: any LevelController
+    if invocation.action.isBrightness {
+      guard let brightness else { throw ActionError.unavailable("Brightness unavailable.") }
+      controller = brightness
+    } else { controller = volume }
+    let target = invocation.action.isRelative ? try controller.read() + invocation.value : invocation.value
+    try controller.write(min(1, max(0, target)))
+    return try controller.read()
   }
 }
 public struct GestureSettings: Codable, Equatable, Sendable {
@@ -57,6 +69,7 @@ public struct Profile: Codable, Equatable, Identifiable, Sendable {
   public var id: UUID
   public var name: String
   public var bundleIDs: [String]
+  public var leftEdgeEnabled: Bool? // Missing in older profiles; the new gesture is opt-in.
   public var gesture: GestureSettings
   public init(name: String, bundleIDs: [String] = []) {
     id = UUID()
@@ -136,7 +149,9 @@ public enum GestureProgress: Equatable {
   case ready, outsideEdge, liftFinger, tracking(Double), activated
 }
 
+public enum TrackpadEdge { case left, right }
 public struct GestureEngine {
+  private let edge: TrackpadEdge
   public private(set) var progress: GestureProgress = .ready
   private var origin: Contact?
   private var lastY = 0.0
@@ -145,9 +160,9 @@ public struct GestureEngine {
   private var until = 0.0
   private var lastEmission = -Double.infinity
   private var lastTime = -Double.infinity
-  public init() {}
+  public init(edge: TrackpadEdge = .right) { self.edge = edge }
   public mutating func reset() {
-    self = .init()
+    self = .init(edge: edge)
     progress = .liftFinger
     blocked = true
   }
@@ -183,8 +198,9 @@ public struct GestureEngine {
       blocked = true
       return nil
     }
+    let edgeDistance = edge == .left ? c.x : 1 - c.x
     guard let start = origin else {
-      guard c.x >= 1 - settings.edgeWidth else {
+      guard edgeDistance <= settings.edgeWidth else {
         progress = .outsideEdge
         blocked = true
         return nil
@@ -194,7 +210,7 @@ public struct GestureEngine {
       lastY = c.y
       return nil
     }
-    guard c.id == start.id, c.x >= 1 - settings.edgeWidth - 0.03,
+    guard c.id == start.id, edgeDistance <= settings.edgeWidth + 0.03,
       abs(c.x - start.x) < 0.06
     else {
       origin = nil
@@ -217,7 +233,7 @@ public struct GestureEngine {
     guard abs(delta) >= 0.002 else { return nil }
     lastY = c.y
     lastEmission = frame.time
-    return ActionInvocation(.adjustVolume, min(0.08, max(-0.08, delta)))
+    return ActionInvocation(edge == .left ? .adjustBrightness : .adjustVolume, min(0.08, max(-0.08, delta)))
   }
 }
 @MainActor public protocol TouchProvider: AnyObject {

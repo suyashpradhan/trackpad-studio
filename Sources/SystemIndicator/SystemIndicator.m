@@ -5,7 +5,7 @@
 #import <math.h>
 #import <string.h>
 
-bool TSShowVolumeIndicator(double level, uint32_t displayID) {
+bool TSShowLevelIndicator(double level, uint32_t displayID, bool brightness) {
     static id manager;
     static SEL show;
     static NSMethodSignature *signature;
@@ -32,7 +32,7 @@ bool TSShowVolumeIndicator(double level, uint32_t displayID) {
     if (!signature || !isfinite(level)) return false;
     // macOS on Intel and Apple Silicon is little-endian. NSInvocation copies
     // the declared argument width, including 1-byte BOOL and 4-byte display ID.
-    uint64_t args[] = {level <= 0 ? 4u : 3u, displayID, 500, 900,
+    uint64_t args[] = {brightness ? 1u : (level <= 0 ? 4u : 3u), displayID, 500, 900,
                        (uint64_t)llround(fmin(1, fmax(0, level)) * 100), 100, 0};
     @try {
         NSInvocation *call = [NSInvocation invocationWithMethodSignature:signature];

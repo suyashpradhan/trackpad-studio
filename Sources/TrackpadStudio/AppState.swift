@@ -13,9 +13,19 @@ import StudioCore
   @Published var message: String?
   @Published private(set) var undoAvailable = false
   let audio = CoreAudioVolume()
-  lazy var router = ActionRouter(volume: audio)
+  let display = DisplayBrightness()
+  @Published private(set) var brightness = 0.0
+  @Published private(set) var brightnessIssue: String?
+  @Published private(set) var displayName = "Built-in display"
+  lazy var router = ActionRouter(volume: audio, brightness: display)
   private let touch = RealTouchProvider()
   private var engine = VolumeGestureSession()
+  private var leftEngine = VolumeGestureSession(edge: .left)
+  @Published private(set) var practiceEdge: TrackpadEdge = .right
+  private func resetGestures() {
+    engine.reset()
+    leftEngine.reset()
+  }
   private let indicator = VolumeIndicator()
   private lazy var practiceWindow = PracticeWindow(state: self)
   @Published private(set) var outputName = "Default output"
@@ -25,17 +35,21 @@ import StudioCore
   @Published private(set) var practicedSlide = false
   @Published private(set) var touchAvailable = false
 
-  func beginPractice() {
-    engine.practice()
+  func beginPractice(edge: TrackpadEdge = .right) {
+    engine.finishPractice()
+    leftEngine.finishPractice()
+    practiceEdge = edge
+    if edge == .left { leftEngine.practice() } else { engine.practice() }
     practiceProgress = .ready
     practicePoint = nil
     practicedSlide = false
-    sampleLevel = engine.sampleLevel
+    sampleLevel = 0.5
     practiceWindow.present()
   }
   func closePractice() { practiceWindow.close() }
   func finishPractice() {
     engine.finishPractice()
+    leftEngine.finishPractice()
     practicePoint = nil
   }
   private var received = 0
@@ -55,9 +69,11 @@ import StudioCore
     touch.onFrame = { [weak self] frame in self?.receive(frame) }
     restartTouch()
     refreshVolume()
+    refreshBrightness()
     timer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect().sink { [weak self] _ in
       MainActor.assumeIsolated {
         self?.refreshVolume()
+        self?.refreshBrightness()
         if let self, self.frameCount != self.received { self.frameCount = self.received }
       }
     }
@@ -70,7 +86,7 @@ import StudioCore
       MainActor.assumeIsolated {
         if bundle != Bundle.main.bundleIdentifier {
           self?.foreground = bundle
-          self?.engine.reset()
+          self?.resetGestures()
         }
       }
     }
@@ -79,7 +95,7 @@ import StudioCore
     ) { [weak self] _ in
       MainActor.assumeIsolated {
         self?.touch.stop()
-        self?.engine.reset()
+        self?.resetGestures()
       }
     }
     wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -88,16 +104,19 @@ import StudioCore
       MainActor.assumeIsolated {
         self?.restartTouch()
         self?.refreshVolume()
+        self?.refreshBrightness()
       }
     }
-    if CommandLine.arguments.contains("--practice") {
+    if CommandLine.arguments.contains("--practice-brightness") {
+      DispatchQueue.main.async { [weak self] in self?.beginPractice(edge: .left) }
+    } else if CommandLine.arguments.contains("--practice") {
       DispatchQueue.main.async { [weak self] in self?.beginPractice() }
     }
   }
   func restartTouch() {
     touch.stop()
     touchAvailable = false
-    engine.reset()
+    resetGestures()
     awaitingFrame = true
     guard !settings.paused else {
       touchStatus = "Gestures paused · menu controls available"
@@ -116,23 +135,51 @@ import StudioCore
       touchStatus = "Receiving live trackpad frames"
       awaitingFrame = false
     }
-    if let invocation = engine.consume(frame, settings: profile.gesture, paused: settings.paused) {
-      perform(invocation)
+    var leftSettings = GestureSettings()
+    leftSettings.enabled = leftEngine.practicing || (profile.leftEdgeEnabled == true && brightnessIssue == nil)
+    if !leftEngine.practicing, let action = engine.consume(frame, settings: profile.gesture, paused: false) {
+      perform(action)
     }
-    if engine.practicing {
+    if !engine.practicing, let action = leftEngine.consume(frame, settings: leftSettings, paused: false) {
+      perform(action)
+    }
+    if engine.practicing || leftEngine.practicing {
+      let session = leftEngine.practicing ? leftEngine : engine
       let point = frame.contacts.first.map { CGPoint(x: $0.x, y: $0.y) }
       if point != practicePoint { practicePoint = point }
-      if practiceProgress != engine.progress { practiceProgress = engine.progress }
-      if sampleLevel != engine.sampleLevel { sampleLevel = engine.sampleLevel; practicedSlide = true }
+      if practiceProgress != session.progress { practiceProgress = session.progress }
+      if sampleLevel != session.sampleLevel { sampleLevel = session.sampleLevel; practicedSlide = true }
     }
   }
   func perform(_ invocation: ActionInvocation) {
     do {
-      volume = try router.dispatch(invocation)
-      indicator.show(volume)
-      volumeIssue = nil
+      let value = try router.dispatch(invocation)
+      if invocation.action.isBrightness {
+        brightness = value
+        brightnessIssue = nil
+        if let screen = display.screen { indicator.show(value, brightnessScreen: screen) }
+      } else {
+        volume = value
+        indicator.show(value)
+        volumeIssue = nil
+      }
       actionCount += 1
-    } catch { volumeIssue = error.localizedDescription }
+    } catch {
+      if invocation.action.isBrightness { brightnessIssue = error.localizedDescription }
+      else { volumeIssue = error.localizedDescription }
+    }
+  }
+  func refreshBrightness() {
+    display.refreshTarget()
+    let name = display.screen?.localizedName ?? "Built-in display"
+    if displayName != name { displayName = name }
+    do {
+      let level = try display.read()
+      if brightness != level { brightness = level }
+      if brightnessIssue != nil { brightnessIssue = nil }
+    } catch {
+      if brightnessIssue != error.localizedDescription { brightnessIssue = error.localizedDescription }
+    }
   }
   func refreshVolume() {
     let name = audio.outputName
@@ -155,7 +202,7 @@ import StudioCore
       let pauseChanged = next.paused != settings.paused
       settings = next
       undoAvailable = true
-      engine.reset()
+      resetGestures()
       message = nil
       if pauseChanged { restartTouch() }
     } catch { message = "Settings not saved: \(error.localizedDescription)" }

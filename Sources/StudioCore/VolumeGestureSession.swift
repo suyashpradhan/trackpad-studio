@@ -2,11 +2,11 @@ import Foundation
 
 /// Only live sessions return actions to the system router.
 public struct VolumeGestureSession {
-  private var recognizer = GestureEngine()
+  private var recognizer: GestureEngine
   public private(set) var practicing = false
   public private(set) var sampleLevel = 0.5
   public var progress: GestureProgress { recognizer.progress }
-  public init() {}
+  public init(edge: TrackpadEdge = .right) { recognizer = GestureEngine(edge: edge) }
 
   public mutating func practice() {
     practicing = true

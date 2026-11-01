@@ -20,6 +20,27 @@ import SwiftUI
         exit(2)
       }
     }
+    if CommandLine.arguments.contains("--check-brightness") {
+      do {
+        let controller = DisplayBrightness()
+        let start = try controller.read()
+        guard let screen = controller.screen else { throw ActionError.unavailable("No built-in screen") }
+        let router = ActionRouter(volume: CoreAudioVolume(), brightness: controller)
+        let target = start > 0.5 ? start - 0.03 : start + 0.03
+        defer { try? controller.write(start) }
+        _ = try router.dispatch(.init(.setBrightness, target))
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        let changed = try controller.read()
+        try controller.write(start)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        let restored = try controller.read()
+        let result = VolumeIndicator().show(restored, brightnessScreen: screen)
+        print("\(screen.localizedName): \(start) → \(changed) → \(restored); \(result)")
+        guard abs(changed-target) < 0.015, abs(restored-start) < 0.015 else { throw ActionError.unavailable("Readback mismatch") }
+        RunLoop.main.run(until: Date().addingTimeInterval(1))
+      } catch { print(error.localizedDescription); exit(2) }
+      exit(0)
+    }
     if CommandLine.arguments.contains("--check-volume-indicator") {
       do {
         let value = try CoreAudioVolume().read()
@@ -117,8 +138,8 @@ struct ProfileEditor: View {
       ProposalEditor(state: state).tabItem { Label("Customization", systemImage: "wand.and.stars") }
       VStack(alignment: .leading, spacing: 14) {
         Text("Diagnostics & Permissions").font(.title2)
-        Toggle("Use compatibility volume indicator", isOn: $compatibilityIndicator)
-          .help("Use this if the system volume indicator does not appear.")
+        Toggle("Use compatibility indicators", isOn: $compatibilityIndicator)
+          .help("Use this if the system volume or brightness indicator does not appear.")
         Button("Try gesture quietly…") { state.beginPractice() }
         Text(state.touchStatus)
         Text("Frames received: \(state.frameCount) · Actions dispatched: \(state.actionCount)")

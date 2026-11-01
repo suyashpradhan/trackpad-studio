@@ -49,7 +49,7 @@ THIRD_PARTY_NOTICES.md
 - Navigate with Tab/Space/arrows and VoiceOver. Check high contrast and larger text. No animation depends on motion settings.
 - Measure idle CPU and responsiveness over a longer session. Magic Trackpad, Intel and older macOS are unverified.
 
-Private framework ABI risks, reference selection and scope limitations: [docs/FEASIBILITY.md](docs/FEASIBILITY.md). Brightness/media and extra gesture zones are not implemented. No real model provider or cloud service is connected.
+Private framework ABI risks, reference selection and scope limitations: [docs/FEASIBILITY.md](docs/FEASIBILITY.md). The built-in display supports left-edge brightness in 0.3. No real model provider or cloud service is connected.
 
 ## Verified on the development Mac
 
@@ -75,3 +75,12 @@ For a local test, quit any running copy and open the app directly into practice:
 ```sh
 open "dist/Trackpad Studio.app" --args --practice
 ```
+
+
+## Left-edge brightness (0.3)
+
+Use **Display brightness** in the menu to adjust the named built-in screen, including while gestures are paused. To enable the gesture for the active profile, choose **Try left-edge brightness**, slide in the shaded strip, then choose **Use left-edge brightness**. Start a fresh one-finger slide in the leftmost 8% of the trackpad. Up brightens and down dims. Both edges use the same deliberate activation and cancellation rules. Quiet practice isolates both system controls.
+
+The app dynamically loads DisplayServices and requests the native sun indicator on the target display after successful writes. The compatibility indicator setting also covers brightness. External displays are outside this release’s scope. With no active built-in panel, the menu explains availability.
+
+To open directly into quiet brightness practice after quitting the app, run `open "dist/Trackpad Studio.app" --args --practice-brightness`.

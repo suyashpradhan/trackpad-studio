@@ -6,10 +6,10 @@ import SystemIndicator
   private var dismissal: Task<Void, Never>?
 
   @discardableResult
-  func show(_ level: Double) -> String {
-    let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+  func show(_ level: Double, brightnessScreen: NSScreen? = nil) -> String {
+    let screen = brightnessScreen ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
     let id = (screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? CGMainDisplayID()
-    if !UserDefaults.standard.bool(forKey: "useCompatibilityIndicator"), TSShowVolumeIndicator(level, id) {
+    if !UserDefaults.standard.bool(forKey: "useCompatibilityIndicator"), TSShowLevelIndicator(level, id, brightnessScreen != nil) {
       panel?.orderOut(nil)
       return "macOS indicator requested"
     }
@@ -28,7 +28,7 @@ import SystemIndicator
       panel = window
     }
     let content = HStack {
-      Image(systemName: level == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+      Image(systemName: brightnessScreen != nil ? "sun.max.fill" : level == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
       ProgressView(value: level)
       Text(level, format: .percent.precision(.fractionLength(0))).monospacedDigit()
     }.padding(.horizontal, 14).frame(width: 208, height: 48).background(.regularMaterial, in: Capsule())

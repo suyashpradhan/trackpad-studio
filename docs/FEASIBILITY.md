@@ -19,4 +19,4 @@ No Accessibility prompt is needed for these CoreAudio/raw-touch paths. If macOS 
 
 ## Deliberate scope
 
-Only right-edge volume is available. Brightness/media are explicitly unavailable, not inert sliders/buttons. Profile presets are editable local copies with the same safe volume mapping. Manual selection overrides app matching, then first profile provides fallback. Other zones, keyboard shortcut dispatch, launch-at-login, polished icon/accent editing, import/export and real on-device AI await later milestones. VoiceOver/keyboard hardware QA and long-run CPU/false-positive testing are pending.
+The initial proof covered right-edge volume. Version 0.3 adds opt-in left-edge brightness through private DisplayServices calls for active built-in displays. Profile presets are editable local copies with the same safe volume mapping. Manual selection overrides app matching, then first profile provides fallback. Other zones, keyboard shortcut dispatch, launch-at-login, polished icon/accent editing, import/export and real on-device AI await later milestones. VoiceOver/keyboard hardware QA and long-run CPU/false-positive testing are pending.
