@@ -84,3 +84,9 @@ Use **Display brightness** in the menu to adjust the named built-in screen, incl
 The app dynamically loads DisplayServices and requests the native sun indicator on the target display after successful writes. The compatibility indicator setting also covers brightness. External displays are outside this release’s scope. With no active built-in panel, the menu explains availability.
 
 To open directly into quiet brightness practice after quitting the app, run `open "dist/Trackpad Studio.app" --args --practice-brightness`.
+
+## Visual profile editor (0.4)
+
+Choose **Edit profile…** in the popover, choose a profile, then click either shaded edge of the trackpad. Each edge has its own action, enabled switch, width, activation distance and sensitivity. **Try here** uses live touches with the draft tuning and shows a sample level inside the editor. During practice, both hardware controls are isolated. Leaving the editor ends practice. **Save changes** applies both edges to the selected profile. **Discard** restores its saved mappings. Older profiles retain their previous tuning and brightness opt-in.
+
+To launch directly into the editor, quit the app and run `open "dist/Trackpad Studio.app" --args --edit-profile`.

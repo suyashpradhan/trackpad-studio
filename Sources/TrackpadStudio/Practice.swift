@@ -49,11 +49,10 @@ struct TrackpadDiagram: View {
 struct PracticeView: View {
   @ObservedObject var state: AppState
   @AppStorage("finishedVolumeIntroduction") private var finished = false
-  private var isBrightness: Bool { state.practiceEdge == .left }
+  private var isBrightness: Bool { state.practiceEdge.action(for: state.profile[state.practiceEdge]) == .brightness }
   private var deviceIssue: String? { isBrightness ? state.brightnessIssue : state.volumeIssue }
   private var hint: String {
     if state.settings.paused { return "Gestures are paused." }
-    if !isBrightness && !state.profile.gesture.enabled { return "The right edge is off in this profile." }
     if !state.touchAvailable { return state.touchStatus }
     switch state.practiceProgress {
     case .ready: return state.practicedSlide ? "You’ve got it. Try another slide, or enable live control." : "Place one finger in the shaded strip, then slide up or down."
@@ -65,9 +64,9 @@ struct PracticeView: View {
   }
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Label(isBrightness ? "Left edge · Brightness" : "Quiet practice", systemImage: "hand.draw").font(.title2.bold())
+      Label("\(state.practiceEdge.rawValue) edge · \(isBrightness ? "Brightness" : "Volume")", systemImage: "hand.draw").font(.title2.bold())
       Text("Only the sample level changes while this window is open.")
-      TrackpadDiagram(width: isBrightness ? GestureSettings().edgeWidth : state.profile.gesture.edgeWidth, edge: state.practiceEdge, contact: state.practicePoint,
+      TrackpadDiagram(width: state.profile[state.practiceEdge].edgeWidth, edge: state.practiceEdge, contact: state.practicePoint,
                       active: state.practiceProgress == .activated).frame(height: 158)
       Text(hint).frame(minHeight: 38, alignment: .leading)
       ProgressView(value: state.sampleLevel) {
@@ -76,8 +75,6 @@ struct PracticeView: View {
       .accessibilityValue(Text(state.sampleLevel, format: .percent.precision(.fractionLength(0))))
       if state.settings.paused {
         Button("Resume gestures to practice") { state.update { $0.paused = false } }
-      } else if !isBrightness && !state.profile.gesture.enabled {
-        Button("Enable right edge for this profile") { state.editProfile { $0.gesture.enabled = true } }
       } else if !state.touchAvailable {
         Button("Reconnect trackpad") { state.restartTouch() }
       }
@@ -88,15 +85,14 @@ struct PracticeView: View {
           if state.settings.paused { finished = true; state.closePractice() }
         }.help("Pause gestures and keep the menu volume controls available.")
         Spacer()
-        Button(isBrightness ? "Use left-edge brightness" : "Try it with sound") {
-          if isBrightness {
-            state.editProfile { $0.leftEdgeEnabled = true }
-            guard state.profile.leftEdgeEnabled == true else { return }
-          } else { finished = true }
+        Button("Use this gesture") {
+          state.editProfile { $0[state.practiceEdge].enabled = true }
+          guard state.profile[state.practiceEdge].enabled else { return }
+          finished = true
           state.closePractice()
         }
           .buttonStyle(.borderedProminent)
-          .disabled(state.settings.paused || (!isBrightness && !state.profile.gesture.enabled) || deviceIssue != nil || !state.touchAvailable)
+          .disabled(state.settings.paused || deviceIssue != nil || !state.touchAvailable)
       }
       if let issue = deviceIssue ?? state.message { Text(issue).font(.caption) }
     }.padding(24).frame(width: 440)

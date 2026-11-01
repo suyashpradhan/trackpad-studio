@@ -35,7 +35,23 @@ import StudioCore
   @Published private(set) var practicedSlide = false
   @Published private(set) var touchAvailable = false
 
+  private lazy var editor = EditorWindow(state: self)
+  @Published private(set) var inlineSettings: GestureSettings?
+  func openEditor() { editor.present() }
+  func endInlinePractice() {
+    if inlineSettings != nil { finishPractice() }
+  }
+  func setInlinePractice(edge: TrackpadEdge, settings: GestureSettings) {
+    practiceWindow.close()
+    startSession(edge)
+    inlineSettings = settings
+  }
   func beginPractice(edge: TrackpadEdge = .right) {
+    inlineSettings = nil
+    startSession(edge)
+    practiceWindow.present()
+  }
+  private func startSession(_ edge: TrackpadEdge) {
     engine.finishPractice()
     leftEngine.finishPractice()
     practiceEdge = edge
@@ -44,10 +60,10 @@ import StudioCore
     practicePoint = nil
     practicedSlide = false
     sampleLevel = 0.5
-    practiceWindow.present()
   }
   func closePractice() { practiceWindow.close() }
   func finishPractice() {
+    inlineSettings = nil
     engine.finishPractice()
     leftEngine.finishPractice()
     practicePoint = nil
@@ -107,7 +123,9 @@ import StudioCore
         self?.refreshBrightness()
       }
     }
-    if CommandLine.arguments.contains("--practice-brightness") {
+    if CommandLine.arguments.contains("--edit-profile") {
+      DispatchQueue.main.async { [weak self] in self?.openEditor() }
+    } else if CommandLine.arguments.contains("--practice-brightness") {
       DispatchQueue.main.async { [weak self] in self?.beginPractice(edge: .left) }
     } else if CommandLine.arguments.contains("--practice") {
       DispatchQueue.main.async { [weak self] in self?.beginPractice() }
@@ -135,14 +153,16 @@ import StudioCore
       touchStatus = "Receiving live trackpad frames"
       awaitingFrame = false
     }
-    var leftSettings = GestureSettings()
-    leftSettings.enabled = leftEngine.practicing || (profile.leftEdgeEnabled == true && brightnessIssue == nil)
-    if !leftEngine.practicing, let action = engine.consume(frame, settings: profile.gesture, paused: false) {
-      perform(action)
+    func configuration(_ edge: TrackpadEdge, practicing: Bool) -> GestureSettings {
+      var value = practicing ? (inlineSettings ?? profile[edge]) : profile[edge]
+      let available = edge.action(for: value) == .volume ? volumeIssue == nil : brightnessIssue == nil
+      value.enabled = practicing || (value.enabled && available)
+      return value
     }
-    if !engine.practicing, let action = leftEngine.consume(frame, settings: leftSettings, paused: false) {
-      perform(action)
-    }
+    let right = configuration(.right, practicing: engine.practicing)
+    let left = configuration(.left, practicing: leftEngine.practicing)
+    if !leftEngine.practicing, let action = engine.consume(frame, settings: right, paused: false) { perform(action) }
+    if !engine.practicing, let action = leftEngine.consume(frame, settings: left, paused: false) { perform(action) }
     if engine.practicing || leftEngine.practicing {
       let session = leftEngine.practicing ? leftEngine : engine
       let point = frame.contacts.first.map { CGPoint(x: $0.x, y: $0.y) }

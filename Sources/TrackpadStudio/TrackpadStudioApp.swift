@@ -100,22 +100,7 @@ struct ProfileEditor: View {
             bundleDraft = state.profile.bundleIDs.joined(separator: ",")
           }
           .help("Example: com.apple.Safari. Each app can belong to only one profile.")
-        Toggle(
-          "Right edge controls volume",
-          isOn: Binding(
-            get: { state.profile.gesture.enabled },
-            set: { value in state.editProfile { $0.gesture.enabled = value } }))
-        Text(
-          "Start at the right edge, slide vertically to activate, then keep sliding. Lift your finger before trying again."
-        ).font(.callout)
-        HStack {
-          TrackpadDiagram(width: state.profile.gesture.edgeWidth)
-          Text("Right edge → Volume")
-        }.frame(height: 90).accessibilityElement(children: .ignore).accessibilityLabel(
-          "Trackpad map: right edge controls volume")
-        slider("Edge width", key: \.edgeWidth, range: 0.03...0.25)
-        slider("Activation distance", key: \.threshold, range: 0.015...0.15)
-        slider("Sensitivity", key: \.sensitivity, range: 0.2...4)
+        Button("Edit trackpad map…") { state.openEditor() }
         ForEach([-0.05, 0.05], id: \.self) { step in
           Toggle(
             step > 0 ? "Pin volume up" : "Pin volume down",
@@ -147,25 +132,13 @@ struct ProfileEditor: View {
           "Volume and raw touch capture do not request Accessibility access. No global keystrokes, touch recordings, or app history are stored. The private touch API may be unavailable on some Macs."
         )
         Button("Retry trackpad connection") { state.restartTouch() }
-        Button("Test simulated slide (raises actual volume)") { state.testGesture() }.disabled(
-          state.volumeIssue != nil)
+        Button("Test simulated right-edge slide (changes mapped control)") { state.testGesture() }.disabled(
+          (TrackpadEdge.right.action(for: state.profile[.right]) == .volume ? state.volumeIssue : state.brightnessIssue) != nil)
         Text(
           "If frames remain at zero while touching the trackpad, capture is not verified. Menu controls remain available. Ordinary pointer and scroll events are never intercepted."
         ).foregroundStyle(.secondary)
         Spacer()
       }.padding().tabItem { Label("Diagnostics", systemImage: "waveform.path.ecg") }
-    }
-  }
-  private func slider(
-    _ name: String, key: WritableKeyPath<GestureSettings, Double>, range: ClosedRange<Double>
-  ) -> some View {
-    VStack(alignment: .leading) {
-      Text("\(name): \(state.profile.gesture[keyPath: key], specifier: "%.3f")")
-      Slider(
-        value: Binding(
-          get: { state.profile.gesture[keyPath: key] },
-          set: { value in state.editProfile { $0.gesture[keyPath: key] = value } }), in: range
-      ).accessibilityLabel(name)
     }
   }
 }

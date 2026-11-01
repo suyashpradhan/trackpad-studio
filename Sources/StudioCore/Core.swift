@@ -53,7 +53,12 @@ public typealias VolumeController = LevelController
     return try controller.read()
   }
 }
+public enum EdgeAction: String, Codable, CaseIterable, Sendable {
+  case volume = "Volume", brightness = "Brightness"
+  public var adjustment: ActionID { self == .volume ? .adjustVolume : .adjustBrightness }
+}
 public struct GestureSettings: Codable, Equatable, Sendable {
+  public var assignment: EdgeAction?
   public var enabled = true
   public var edgeWidth = 0.08
   public var threshold = 0.04
@@ -69,7 +74,20 @@ public struct Profile: Codable, Equatable, Identifiable, Sendable {
   public var id: UUID
   public var name: String
   public var bundleIDs: [String]
-  public var leftEdgeEnabled: Bool? // Missing in older profiles; the new gesture is opt-in.
+  public var leftEdgeEnabled: Bool? // 0.3 opt-in flag, retained for compatible settings writes.
+  private var leftGesture: GestureSettings?
+  public subscript(edge: TrackpadEdge) -> GestureSettings {
+    get {
+      if edge == .right { return gesture }
+      var value = leftGesture ?? GestureSettings()
+      value.enabled = leftEdgeEnabled == true
+      return value
+    }
+    set {
+      if edge == .right { gesture = newValue }
+      else { leftGesture = newValue; leftEdgeEnabled = newValue.enabled }
+    }
+  }
   public var gesture: GestureSettings
   public init(name: String, bundleIDs: [String] = []) {
     id = UUID()
@@ -95,7 +113,8 @@ public struct Settings: Codable, Equatable, Sendable {
     else { throw ActionError.invalid }
     var apps = Set<String>()
     for p in profiles {
-      try p.gesture.validate()
+      try p[.right].validate()
+      try p[.left].validate()
       guard !p.name.trimmingCharacters(in: .whitespaces).isEmpty else { throw ActionError.invalid }
       for app in p.bundleIDs {
         guard
@@ -149,7 +168,12 @@ public enum GestureProgress: Equatable {
   case ready, outsideEdge, liftFinger, tracking(Double), activated
 }
 
-public enum TrackpadEdge { case left, right }
+public enum TrackpadEdge: String, CaseIterable, Sendable {
+  case left = "Left", right = "Right"
+  public func action(for settings: GestureSettings) -> EdgeAction {
+    settings.assignment ?? (self == .left ? .brightness : .volume)
+  }
+}
 public struct GestureEngine {
   private let edge: TrackpadEdge
   public private(set) var progress: GestureProgress = .ready
@@ -233,7 +257,7 @@ public struct GestureEngine {
     guard abs(delta) >= 0.002 else { return nil }
     lastY = c.y
     lastEmission = frame.time
-    return ActionInvocation(edge == .left ? .adjustBrightness : .adjustVolume, min(0.08, max(-0.08, delta)))
+    return ActionInvocation(edge.action(for: settings).adjustment, min(0.08, max(-0.08, delta)))
   }
 }
 @MainActor public protocol TouchProvider: AnyObject {

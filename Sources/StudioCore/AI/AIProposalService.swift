@@ -34,13 +34,13 @@ public struct LocalRulesProvider: AIProposalService {
     case "make volume faster", "faster volume": sensitivity = 2.5
     default: throw ProposalError.unsupported
     }
-    return try JSONEncoder().encode(
-      Proposal(
-        version: 1,
-        edits: [
-          .init(
-            profile: profile.id, zone: "rightEdge", action: .adjustVolume, sensitivity: sensitivity)
-        ]))
+    let edits = TrackpadEdge.allCases.compactMap { edge -> Proposal.Edit? in
+      guard edge.action(for: profile[edge]) == .volume else { return nil }
+      return .init(profile: profile.id, zone: edge == .right ? "rightEdge" : "leftEdge",
+                   action: .adjustVolume, sensitivity: sensitivity)
+    }
+    guard !edits.isEmpty else { throw ProposalError.unsupported }
+    return try JSONEncoder().encode(Proposal(version: 1, edits: edits))
   }
 }
 public struct ProposalPreview {
@@ -71,21 +71,24 @@ public enum ProposalValidator {
     let proposal = try JSONDecoder().decode(Proposal.self, from: data)
     guard proposal.version == 1 else { throw ProposalError.schema }
     var next = settings
-    var visited = Set<UUID>()
+    var visited = Set<String>()
     var lines: [String] = []
     for edit in proposal.edits {
       guard edit.action == .adjustVolume, available.contains(edit.action) else {
         throw ProposalError.unsupported
       }
-      guard edit.zone == "rightEdge",
-        let index = next.profiles.firstIndex(where: { $0.id == edit.profile })
-      else { throw ProposalError.schema }
-      guard visited.insert(edit.profile).inserted else { throw ProposalError.collision }
+      let edge: TrackpadEdge
+      switch edit.zone {
+      case "rightEdge": edge = .right
+      case "leftEdge": edge = .left
+      default: throw ProposalError.schema
+      }
+      guard let index = next.profiles.firstIndex(where: { $0.id == edit.profile }),
+            edge.action(for: next.profiles[index][edge]) == .volume else { throw ProposalError.schema }
+      guard visited.insert(edit.profile.uuidString + edit.zone).inserted else { throw ProposalError.collision }
       let prior = next.profiles[index]
-      next.profiles[index].gesture.sensitivity = edit.sensitivity
-      lines.append(
-        "\(prior.name) · Right-edge volume sensitivity: \(prior.gesture.sensitivity) → \(edit.sensitivity)"
-      )
+      next.profiles[index][edge].sensitivity = edit.sensitivity
+      lines.append("\(prior.name) · \(edge.rawValue)-edge volume sensitivity: \(prior[edge].sensitivity) → \(edit.sensitivity)")
     }
     try next.validate()
     return ProposalPreview(before: settings, after: next, diff: lines.joined(separator: "\n"))

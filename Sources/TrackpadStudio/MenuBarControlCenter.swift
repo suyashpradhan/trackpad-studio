@@ -45,11 +45,8 @@ struct MenuBarControlCenter: View {
         Slider(value: Binding(get: { state.brightness }, set: { state.perform(.init(.setBrightness, $0)) }), in: 0...1)
           .accessibilityLabel("Brightness on \(state.displayName)")
           .accessibilityValue(Text(state.brightness, format: .percent.precision(.fractionLength(0))))
-        if state.profile.leftEdgeEnabled == true {
-          Toggle("Left-edge brightness", isOn: Binding(get: { state.profile.leftEdgeEnabled == true },
-            set: { enabled in state.editProfile { $0.leftEdgeEnabled = enabled } }))
-        } else {
-          Button("Try left-edge brightness…") { state.beginPractice(edge: .left) }
+        Button("Try left edge · \(TrackpadEdge.left.action(for: state.profile[.left]).rawValue)…") {
+          state.beginPractice(edge: .left)
         }
       }
       Divider()
@@ -60,7 +57,7 @@ struct MenuBarControlCenter: View {
         Button(state.settings.paused ? "Resume gestures" : "Pause gestures") { state.update { $0.paused.toggle() } }
       }
       if !finished {
-        Text("Slide one finger along the right edge to adjust volume. Practice with a sample level first.").font(.callout)
+        Text("Slide one finger along the right edge to adjust \(TrackpadEdge.right.action(for: state.profile[.right]).rawValue.lowercased()). Practice with a sample level first.").font(.callout)
         HStack {
           Button("Practice quietly…") { state.beginPractice() }.buttonStyle(.borderedProminent)
           Button("Use menu controls") {
@@ -80,7 +77,8 @@ struct MenuBarControlCenter: View {
       Text(state.foreground).font(.caption).foregroundStyle(.secondary).lineLimit(1)
       if let message = state.message { Text(message).font(.caption) }
       HStack {
-        Button("Edit profile / Settings…") {
+        Button("Edit profile…") { state.openEditor() }
+        Button("Settings…") {
           openWindow(id: "settings")
           NSApplication.shared.activate(ignoringOtherApps: true)
         }.keyboardShortcut(",")
